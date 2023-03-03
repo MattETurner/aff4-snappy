@@ -86,9 +86,7 @@ def compress(data, encoding='utf-8'):
 def uncompress(data, decoding=None):
     if isinstance(data, unicode):
         raise UncompressError("It's only possible to uncompress bytes")
-    if decoding:
-        return _uncompress(data).decode(decoding)
-    return _uncompress(data)
+    return _uncompress(data).decode(decoding) if decoding else _uncompress(data)
 
 decompress = uncompress
 
@@ -215,8 +213,7 @@ class StreamDecompressor(object):
                         size != len(_STREAM_IDENTIFIER)):
                     raise UncompressError("stream missing snappy identifier")
                 self._header_found = True
-            if (_RESERVED_UNSKIPPABLE[0] <= chunk_type and
-                    chunk_type < _RESERVED_UNSKIPPABLE[1]):
+            if _RESERVED_UNSKIPPABLE[0] <= chunk_type < _RESERVED_UNSKIPPABLE[1]:
                 raise UncompressError(
                     "stream received unskippable but unknown chunk")
             if len(self._buf) < 4 + size:
@@ -227,8 +224,7 @@ class StreamDecompressor(object):
                     raise UncompressError(
                         "stream has invalid snappy identifier")
                 continue
-            if (_RESERVED_SKIPPABLE[0] <= chunk_type and
-                    chunk_type < _RESERVED_SKIPPABLE[1]):
+            if _RESERVED_SKIPPABLE[0] <= chunk_type < _RESERVED_SKIPPABLE[1]:
                 continue
             assert chunk_type in (_COMPRESSED_CHUNK, _UNCOMPRESSED_CHUNK)
             crc, chunk = chunk[:4], chunk[4:]
@@ -269,8 +265,8 @@ def stream_compress(src, dst, blocksize=_STREAM_TO_STREAM_BLOCK_SIZE):
     while True:
         buf = src.read(blocksize)
         if not buf: break
-        buf = compressor.add_chunk(buf)
-        if buf: dst.write(buf)
+        if buf := compressor.add_chunk(buf):
+            dst.write(buf)
 
 
 def stream_decompress(src, dst, blocksize=_STREAM_TO_STREAM_BLOCK_SIZE):
@@ -284,8 +280,8 @@ def stream_decompress(src, dst, blocksize=_STREAM_TO_STREAM_BLOCK_SIZE):
     while True:
         buf = src.read(blocksize)
         if not buf: break
-        buf = decompressor.decompress(buf)
-        if buf: dst.write(buf)
+        if buf := decompressor.decompress(buf):
+            dst.write(buf)
     decompressor.flush()  # makes sure the stream ended well
 
 
@@ -317,11 +313,7 @@ def cmdline_main():
     else:
         src = sys.stdin
 
-    if sys.argv[1] == "-c":
-        method = stream_compress
-    else:
-        method = stream_decompress
-
+    method = stream_compress if sys.argv[1] == "-c" else stream_decompress
     method(src, dst)
 
 
